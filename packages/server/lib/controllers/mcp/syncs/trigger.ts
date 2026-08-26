@@ -7,32 +7,35 @@ import { defineManagementMcpTool } from '../managementTool.js';
 import { PublicMcpError } from '../utils.js';
 import { syncCommandErrorToMcp } from './errors.js';
 import { syncTargets } from './helpers.js';
-import { setSyncsStateArgumentsSchema, setSyncsStateOutputSchema } from './schema.js';
+import { triggerSyncsArgumentsSchema, triggerSyncsOutputSchema } from './schema.js';
 
-import type { SetSyncsStateOutput } from './schema.js';
-import type { AuditPolicy } from '@nangohq/types';
+import type { TriggerSyncsOutput } from './schema.js';
 
 const orchestrator = getOrchestrator();
 
-export const setSyncsStateTool = defineManagementMcpTool<typeof setSyncsStateArgumentsSchema, SetSyncsStateOutput>({
-    name: 'syncs_set_state',
-    description: 'Set one or more syncs to the started or paused state, optionally limited to one connection.',
-    inputSchema: setSyncsStateArgumentsSchema,
-    outputSchema: setSyncsStateOutputSchema,
+export const triggerSyncsTool = defineManagementMcpTool<typeof triggerSyncsArgumentsSchema, TriggerSyncsOutput>({
+    name: 'syncs_trigger',
+    description: 'Trigger one or more syncs, optionally performing a full reset and/or clearing existing synced records.',
+    inputSchema: triggerSyncsArgumentsSchema,
+    outputSchema: triggerSyncsOutputSchema,
     requiredScopes: { every: ['environment:syncs:execute'] },
     audit: {
-        kind: 'dynamic-audit',
-        policy: ({ args }) => syncStateAuditPolicy(args),
+        kind: 'audit',
+        resource: 'sync',
+        action: 'triggered',
+        scope: 'environment',
         targetFromOutput: ({ args }) => syncTargets(args.syncs),
         metadata: ({ args }) => ({
             providerConfigKey: args.integration_id,
-            ...(args.connection_id ? { connectionId: args.connection_id } : {})
+            ...(args.connection_id ? { connectionId: args.connection_id } : {}),
+            reset: args.reset,
+            emptyCache: args.empty_cache
         })
     },
     annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
+        destructiveHint: true,
+        idempotentHint: false,
         openWorldHint: false
     },
     async handler({ args, environment }) {
@@ -46,7 +49,8 @@ export const setSyncsStateTool = defineManagementMcpTool<typeof setSyncsStateArg
             environment,
             providerConfigKey: args.integration_id,
             syncIdentifiers: syncIdentifiers.value,
-            command: args.state === 'started' ? SyncCommand.UNPAUSE : SyncCommand.PAUSE,
+            command: args.reset ? SyncCommand.RUN_FULL : SyncCommand.RUN,
+            deleteRecords: args.empty_cache,
             logContextGetter,
             connectionId: args.connection_id,
             initiator: 'MCP call'
@@ -58,16 +62,3 @@ export const setSyncsStateTool = defineManagementMcpTool<typeof setSyncsStateArg
         return Ok({ success: true as const });
     }
 });
-
-function syncStateAuditPolicy(args: unknown): AuditPolicy<'sync', 'started' | 'paused', 'environment'> | undefined {
-    if (typeof args !== 'object' || args === null) {
-        return undefined;
-    }
-
-    const state = (args as Record<string, unknown>)['state'];
-    if (state !== 'started' && state !== 'paused') {
-        return undefined;
-    }
-
-    return { kind: 'audit', resource: 'sync', action: state, scope: 'environment' };
-}
