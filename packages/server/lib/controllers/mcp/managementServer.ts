@@ -22,6 +22,7 @@ import { listIntegrationsTool } from './integrations/list.js';
 import { updateIntegrationsTool } from './integrations/update.js';
 import { getLogOperationTool } from './logs/getOperation.js';
 import { listLogOperationsTool } from './logs/listOperations.js';
+import { getProvidersTool } from './providers/get.js';
 import { proxyRequestTool } from './proxy/request.js';
 import { handleMcpToolError, jsonStructuredContent } from './utils.js';
 
@@ -36,6 +37,7 @@ const emptyObjectJsonSchema: Tool['inputSchema'] = { type: 'object', properties:
 const managementMcpTools: ManagementMcpTool[] = [
     searchDocsTool,
     queryDocsFilesystemTool,
+    getProvidersTool,
     createConnectSessionTool,
     listIntegrationsTool,
     getIntegrationsTool,
